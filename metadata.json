@@ -1,0 +1,6 @@
+{
+  "name": "CreatorForge AI",
+  "description": "A complete content creation workspace to generate social posts, captions, video scripts, content calendars, and campaign variations with repurposing and audience targeting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
