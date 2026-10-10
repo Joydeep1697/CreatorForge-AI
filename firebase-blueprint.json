@@ -1,0 +1,35 @@
+{
+  "entities": {
+    "User": {
+      "path": "/users/{userId}",
+      "description": "User profile with credits and subscription tier",
+      "fields": {
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "credits": { "type": "number" },
+        "tier": { "type": "string" },
+        "createdAt": { "type": "timestamp" },
+        "updatedAt": { "type": "timestamp" }
+      }
+    },
+    "Creation": {
+      "path": "/users/{userId}/creations/{creationId}",
+      "description": "Generated content pieces, scripts, calendars, and repurposed packages",
+      "fields": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string" },
+        "platform": { "type": "string" },
+        "originalInput": { "type": "string" },
+        "targetAudience": { "type": "string" },
+        "tone": { "type": "string" },
+        "content": { "type": "string" },
+        "isFavorite": { "type": "boolean" },
+        "createdAt": { "type": "timestamp" },
+        "updatedAt": { "type": "timestamp" }
+      }
+    }
+  }
+}

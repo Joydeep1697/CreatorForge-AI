@@ -12,7 +12,6 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Repeat
-import androidx.compose.material.icons.filled.ViewCarousel
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -24,22 +23,24 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.ui.components.AccountDialog
 import com.example.ui.components.AudienceTargetingSheet
 import com.example.ui.components.CreatorTopBar
-import com.example.ui.screens.CampaignVariationsScreen
-import com.example.ui.screens.ContentCalendarScreen
 import com.example.ui.screens.LibraryScreen
 import com.example.ui.screens.MonetizationDialog
+import com.example.ui.screens.PlanScreen
 import com.example.ui.screens.RepurposeScreen
 import com.example.ui.screens.StudioForgeScreen
 import com.example.ui.theme.CreatorForgeTheme
-import com.example.ui.theme.ForgeDarkBg
-import com.example.ui.theme.ForgeDarkSurface
-import com.example.ui.theme.ForgeVioletPrimary
+import com.example.ui.theme.MinimalDarkBg
+import com.example.ui.theme.MinimalPrimary
+import com.example.ui.theme.MinimalSurface
+import com.example.ui.theme.TextLow
 import com.example.ui.viewmodel.CreatorForgeViewModel
 import com.example.ui.viewmodel.WorkspaceTab
 
@@ -62,11 +63,13 @@ fun CreatorForgeApp(
     val currentTab by viewModel.currentTab.collectAsState()
     val credits by viewModel.credits.collectAsState()
     val tier by viewModel.tier.collectAsState()
+    val currentUser by viewModel.currentUser.collectAsState()
     val showPaywall by viewModel.showPaywallDialog.collectAsState()
     val showAudiencePicker by viewModel.showAudiencePicker.collectAsState()
+    val showAccountDialog by viewModel.showAccountDialog.collectAsState()
     val selectedAudience by viewModel.selectedAudience.collectAsState()
+    val context = LocalContext.current
 
-    // BackHandler to return to StudioForge if on another tab
     BackHandler(enabled = currentTab != WorkspaceTab.STUDIO_FORGE) {
         viewModel.setTab(WorkspaceTab.STUDIO_FORGE)
     }
@@ -75,31 +78,33 @@ fun CreatorForgeApp(
         modifier = Modifier
             .fillMaxSize()
             .testTag("creator_forge_scaffold"),
-        containerColor = ForgeDarkBg,
+        containerColor = MinimalDarkBg,
         topBar = {
             CreatorTopBar(
                 credits = credits,
                 tier = tier,
-                onOpenPaywall = { viewModel.setShowPaywall(true) }
+                currentUser = currentUser,
+                onOpenPaywall = { viewModel.setShowPaywall(true) },
+                onOpenAccount = { viewModel.setShowAccountDialog(true) }
             )
         },
         bottomBar = {
             NavigationBar(
-                containerColor = ForgeDarkSurface,
-                tonalElevation = 8.dp,
+                containerColor = MinimalSurface,
+                tonalElevation = 0.dp,
                 modifier = Modifier.testTag("bottom_nav_bar")
             ) {
                 NavigationBarItem(
                     selected = currentTab == WorkspaceTab.STUDIO_FORGE,
                     onClick = { viewModel.setTab(WorkspaceTab.STUDIO_FORGE) },
-                    icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "Studio") },
-                    label = { Text("Studio", fontSize = 11.sp) },
+                    icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "Create") },
+                    label = { Text("Create", fontSize = 11.sp) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = Color.White,
                         selectedTextColor = Color.White,
-                        indicatorColor = ForgeVioletPrimary,
-                        unselectedIconColor = Color.Gray,
-                        unselectedTextColor = Color.Gray
+                        indicatorColor = MinimalPrimary,
+                        unselectedIconColor = TextLow,
+                        unselectedTextColor = TextLow
                     )
                 )
 
@@ -111,37 +116,23 @@ fun CreatorForgeApp(
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = Color.White,
                         selectedTextColor = Color.White,
-                        indicatorColor = ForgeVioletPrimary,
-                        unselectedIconColor = Color.Gray,
-                        unselectedTextColor = Color.Gray
+                        indicatorColor = MinimalPrimary,
+                        unselectedIconColor = TextLow,
+                        unselectedTextColor = TextLow
                     )
                 )
 
                 NavigationBarItem(
-                    selected = currentTab == WorkspaceTab.CALENDAR,
-                    onClick = { viewModel.setTab(WorkspaceTab.CALENDAR) },
-                    icon = { Icon(Icons.Default.CalendarMonth, contentDescription = "Calendar") },
-                    label = { Text("Calendar", fontSize = 11.sp) },
+                    selected = currentTab == WorkspaceTab.PLAN,
+                    onClick = { viewModel.setTab(WorkspaceTab.PLAN) },
+                    icon = { Icon(Icons.Default.CalendarMonth, contentDescription = "Plan") },
+                    label = { Text("Plan", fontSize = 11.sp) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = Color.White,
                         selectedTextColor = Color.White,
-                        indicatorColor = ForgeVioletPrimary,
-                        unselectedIconColor = Color.Gray,
-                        unselectedTextColor = Color.Gray
-                    )
-                )
-
-                NavigationBarItem(
-                    selected = currentTab == WorkspaceTab.CAMPAIGNS,
-                    onClick = { viewModel.setTab(WorkspaceTab.CAMPAIGNS) },
-                    icon = { Icon(Icons.Default.ViewCarousel, contentDescription = "Campaigns") },
-                    label = { Text("Campaigns", fontSize = 11.sp) },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = Color.White,
-                        selectedTextColor = Color.White,
-                        indicatorColor = ForgeVioletPrimary,
-                        unselectedIconColor = Color.Gray,
-                        unselectedTextColor = Color.Gray
+                        indicatorColor = MinimalPrimary,
+                        unselectedIconColor = TextLow,
+                        unselectedTextColor = TextLow
                     )
                 )
 
@@ -153,9 +144,9 @@ fun CreatorForgeApp(
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = Color.White,
                         selectedTextColor = Color.White,
-                        indicatorColor = ForgeVioletPrimary,
-                        unselectedIconColor = Color.Gray,
-                        unselectedTextColor = Color.Gray
+                        indicatorColor = MinimalPrimary,
+                        unselectedIconColor = TextLow,
+                        unselectedTextColor = TextLow
                     )
                 )
             }
@@ -170,11 +161,7 @@ fun CreatorForgeApp(
                 viewModel = viewModel,
                 modifier = Modifier.padding(innerPadding)
             )
-            WorkspaceTab.CALENDAR -> ContentCalendarScreen(
-                viewModel = viewModel,
-                modifier = Modifier.padding(innerPadding)
-            )
-            WorkspaceTab.CAMPAIGNS -> CampaignVariationsScreen(
+            WorkspaceTab.PLAN -> PlanScreen(
                 viewModel = viewModel,
                 modifier = Modifier.padding(innerPadding)
             )
@@ -183,6 +170,18 @@ fun CreatorForgeApp(
                 modifier = Modifier.padding(innerPadding)
             )
         }
+    }
+
+    // Account & Google Sign-In Dialog
+    if (showAccountDialog) {
+        AccountDialog(
+            currentUser = currentUser,
+            tier = tier,
+            credits = credits,
+            onSignIn = { act -> viewModel.signInWithGoogle(act) },
+            onSignOut = { viewModel.signOut(context) },
+            onDismiss = { viewModel.setShowAccountDialog(false) }
+        )
     }
 
     // Paywall & Credits Dialog
@@ -196,7 +195,7 @@ fun CreatorForgeApp(
         )
     }
 
-    // Audience Targeting Sheet if requested from anywhere
+    // Audience Targeting Sheet
     if (showAudiencePicker) {
         AudienceTargetingSheet(
             selectedAudience = selectedAudience,

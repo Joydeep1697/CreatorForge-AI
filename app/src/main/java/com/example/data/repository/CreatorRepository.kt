@@ -10,6 +10,7 @@ import com.example.data.model.PRESET_AUDIENCES
 import com.example.data.model.RepurposedBundle
 import com.example.data.model.TargetAudience
 import com.example.data.model.UserSubscriptionTier
+import com.example.data.remote.FirebaseManager
 import com.example.data.remote.GeminiService
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,7 +29,13 @@ class CreatorRepository(private val context: Context) {
     fun getAllItems(): Flow<List<ContentItem>> = dao.getAllContentItems()
     fun getFavorites(): Flow<List<ContentItem>> = dao.getFavoriteContentItems()
 
-    suspend fun saveItem(item: ContentItem): Long = dao.insertContentItem(item)
+    suspend fun saveItem(item: ContentItem): Long {
+        val id = dao.insertContentItem(item)
+        try {
+            FirebaseManager.saveCreationToFirestore(context, item.copy(id = id))
+        } catch (_: Exception) {}
+        return id
+    }
     suspend fun toggleFavorite(id: Long, isFav: Boolean) = dao.toggleFavorite(id, isFav)
     suspend fun deleteItem(item: ContentItem) = dao.deleteContentItem(item)
 

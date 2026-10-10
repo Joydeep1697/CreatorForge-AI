@@ -1,6 +1,8 @@
 package com.example.ui.viewmodel
 
+import android.app.Activity
 import android.app.Application
+import android.content.Context
 import android.graphics.Bitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,7 +13,9 @@ import com.example.data.model.PRESET_AUDIENCES
 import com.example.data.model.RepurposedBundle
 import com.example.data.model.TargetAudience
 import com.example.data.model.UserSubscriptionTier
+import com.example.data.remote.FirebaseManager
 import com.example.data.repository.CreatorRepository
+import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -22,18 +26,30 @@ import kotlinx.coroutines.launch
 enum class WorkspaceTab {
     STUDIO_FORGE,
     REPURPOSE,
-    CALENDAR,
-    CAMPAIGNS,
+    PLAN,
     LIBRARY
 }
 
-enum class GenerationMode {
-    TEXT_INPUT,
-    PRODUCT_PHOTO
+enum class StudioFormat(val displayName: String, val creditCost: Int) {
+    SOCIAL_POST("Social Post", 2),
+    VIDEO_SCRIPT("Video Script", 4),
+    CALENDAR("Content Plan", 6),
+    CAMPAIGN("Campaign Angles", 3)
+}
+
+enum class PlanSubTab {
+    CALENDAR,
+    CAMPAIGNS
 }
 
 class CreatorForgeViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = CreatorRepository(application)
+
+    init {
+        FirebaseManager.initAuthListener()
+    }
+
+    val currentUser: StateFlow<FirebaseUser?> = FirebaseManager.currentUser
 
     val credits: StateFlow<Int> = repository.credits
     val tier: StateFlow<UserSubscriptionTier> = repository.tier
@@ -45,8 +61,11 @@ class CreatorForgeViewModel(application: Application) : AndroidViewModel(applica
     private val _currentTab = MutableStateFlow(WorkspaceTab.STUDIO_FORGE)
     val currentTab = _currentTab.asStateFlow()
 
-    private val _generationMode = MutableStateFlow(GenerationMode.TEXT_INPUT)
-    val generationMode = _generationMode.asStateFlow()
+    private val _selectedFormat = MutableStateFlow(StudioFormat.SOCIAL_POST)
+    val selectedFormat = _selectedFormat.asStateFlow()
+
+    private val _planSubTab = MutableStateFlow(PlanSubTab.CALENDAR)
+    val planSubTab = _planSubTab.asStateFlow()
 
     private val _selectedAudience = MutableStateFlow(PRESET_AUDIENCES[0])
     val selectedAudience = _selectedAudience.asStateFlow()
@@ -54,7 +73,7 @@ class CreatorForgeViewModel(application: Application) : AndroidViewModel(applica
     private val _selectedTone = MutableStateFlow("Direct & High Value")
     val selectedTone = _selectedTone.asStateFlow()
 
-    // Inputs
+    // Studio Input
     private val _ideaInput = MutableStateFlow("")
     val ideaInput = _ideaInput.asStateFlow()
 
@@ -78,11 +97,8 @@ class CreatorForgeViewModel(application: Application) : AndroidViewModel(applica
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage = _statusMessage.asStateFlow()
 
-    private val _generatedSocialPost = MutableStateFlow<String?>(null)
-    val generatedSocialPost = _generatedSocialPost.asStateFlow()
-
-    private val _generatedVideoScript = MutableStateFlow<String?>(null)
-    val generatedVideoScript = _generatedVideoScript.asStateFlow()
+    private val _generatedResult = MutableStateFlow<String?>(null)
+    val generatedResult = _generatedResult.asStateFlow()
 
     private val _generatedCalendar = MutableStateFlow<List<CalendarEntry>>(emptyList())
     val generatedCalendar = _generatedCalendar.asStateFlow()
@@ -100,16 +116,19 @@ class CreatorForgeViewModel(application: Application) : AndroidViewModel(applica
     private val _showAudiencePicker = MutableStateFlow(false)
     val showAudiencePicker = _showAudiencePicker.asStateFlow()
 
+    private val _showAccountDialog = MutableStateFlow(false)
+    val showAccountDialog = _showAccountDialog.asStateFlow()
+
     init {
-        // Seed default calendar and angles for immediate rich preview
+        // Pre-populate sample calendar and campaign angles
         viewModelScope.launch {
             _generatedCalendar.value = repository.generateContentCalendar(
-                "CreatorForge AI Studio",
+                "CreatorForge Minimal Workspace",
                 PRESET_AUDIENCES[0],
                 "Engaging"
             )
             _generatedCampaignAngles.value = repository.generateCampaignVariations(
-                "CreatorForge AI Studio",
+                "CreatorForge Minimal Workspace",
                 PRESET_AUDIENCES[0]
             )
         }
@@ -117,7 +136,8 @@ class CreatorForgeViewModel(application: Application) : AndroidViewModel(applica
 
     // Setters
     fun setTab(tab: WorkspaceTab) { _currentTab.value = tab }
-    fun setGenerationMode(mode: GenerationMode) { _generationMode.value = mode }
+    fun setSelectedFormat(format: StudioFormat) { _selectedFormat.value = format }
+    fun setPlanSubTab(subTab: PlanSubTab) { _planSubTab.value = subTab }
     fun setAudience(audience: TargetAudience) { _selectedAudience.value = audience }
     fun setTone(tone: String) { _selectedTone.value = tone }
     fun setIdeaInput(text: String) { _ideaInput.value = text }
@@ -126,6 +146,7 @@ class CreatorForgeViewModel(application: Application) : AndroidViewModel(applica
     fun setRepurposeTone(tone: String) { _repurposeTone.value = tone }
     fun setShowPaywall(show: Boolean) { _showPaywallDialog.value = show }
     fun setShowAudiencePicker(show: Boolean) { _showAudiencePicker.value = show }
+    fun setShowAccountDialog(show: Boolean) { _showAccountDialog.value = show }
     fun clearStatusMessage() { _statusMessage.value = null }
 
     fun toggleChannel(channel: String) {
@@ -138,158 +159,124 @@ class CreatorForgeViewModel(application: Application) : AndroidViewModel(applica
         _selectedChannels.value = current
     }
 
-    // --- ACTIONS ---
+    // --- GOOGLE SIGN-IN ---
+    fun signInWithGoogle(activity: Activity) {
+        FirebaseManager.signInWithGoogle(
+            activity = activity,
+            scope = viewModelScope,
+            onSuccess = {
+                _statusMessage.value = "Welcome, ${it.displayName ?: "Creator"}!"
+                _showAccountDialog.value = false
+            },
+            onError = { err ->
+                if (err != "Sign-in dismissed") {
+                    _statusMessage.value = "Sign-in: $err"
+                }
+            }
+        )
+    }
 
-    fun generateSocialPost(platform: String = "Instagram & LinkedIn") {
+    fun signOut(context: Context) {
+        FirebaseManager.signOut(context, viewModelScope) {
+            _statusMessage.value = "Signed out"
+            _showAccountDialog.value = false
+        }
+    }
+
+    // --- MINIMALIST UNIFIED FORGE ACTION ---
+    fun forgeContent() {
         val input = _ideaInput.value.trim()
         if (input.isBlank() && _selectedImageBitmap.value == null) {
-            _statusMessage.value = "Please enter an idea, description, or pick a product photo!"
+            _statusMessage.value = "Please enter a topic or attach a photo"
             return
         }
 
-        if (!repository.hasEnoughCredits(2)) {
+        val format = _selectedFormat.value
+        if (!repository.hasEnoughCredits(format.creditCost)) {
             _showPaywallDialog.value = true
             return
         }
 
         viewModelScope.launch {
             _isLoading.value = true
-            _statusMessage.value = "Forging $platform copy for ${_selectedAudience.value.name}..."
-            repository.deductCredits(2)
+            repository.deductCredits(format.creditCost)
+            val effectiveTopic = if (input.isNotBlank()) input else "Product Showcase"
 
-            val effectiveTopic = if (input.isNotBlank()) input else "Product Photo Feature"
-            val result = repository.generateSocialAndCaption(
-                topicOrProduct = effectiveTopic,
-                targetAudience = _selectedAudience.value,
-                tone = _selectedTone.value,
-                platform = platform,
-                bitmap = _selectedImageBitmap.value
-            )
+            when (format) {
+                StudioFormat.SOCIAL_POST -> {
+                    val result = repository.generateSocialAndCaption(
+                        topicOrProduct = effectiveTopic,
+                        targetAudience = _selectedAudience.value,
+                        tone = _selectedTone.value,
+                        platform = "Multi-Platform Post",
+                        bitmap = _selectedImageBitmap.value
+                    )
+                    _generatedResult.value = result
+                    repository.saveItem(
+                        ContentItem(
+                            title = "Post: ${effectiveTopic.take(35)}",
+                            type = "social_post",
+                            platform = "social",
+                            originalInput = effectiveTopic,
+                            targetAudience = _selectedAudience.value.name,
+                            tone = _selectedTone.value,
+                            content = result,
+                            hasImage = _selectedImageBitmap.value != null
+                        )
+                    )
+                }
+                StudioFormat.VIDEO_SCRIPT -> {
+                    val result = repository.generateVideoScript(
+                        topicOrProduct = effectiveTopic,
+                        targetAudience = _selectedAudience.value,
+                        tone = _selectedTone.value,
+                        durationSeconds = 30,
+                        bitmap = _selectedImageBitmap.value
+                    )
+                    _generatedResult.value = result
+                    repository.saveItem(
+                        ContentItem(
+                            title = "Script (30s): ${effectiveTopic.take(35)}",
+                            type = "video_script",
+                            platform = "shorts_reels",
+                            originalInput = effectiveTopic,
+                            targetAudience = _selectedAudience.value.name,
+                            tone = _selectedTone.value,
+                            content = result,
+                            hasImage = _selectedImageBitmap.value != null
+                        )
+                    )
+                }
+                StudioFormat.CALENDAR -> {
+                    val calendar = repository.generateContentCalendar(
+                        topicOrBusiness = effectiveTopic,
+                        targetAudience = _selectedAudience.value,
+                        tone = _selectedTone.value
+                    )
+                    _generatedCalendar.value = calendar
+                    _currentTab.value = WorkspaceTab.PLAN
+                    _planSubTab.value = PlanSubTab.CALENDAR
+                }
+                StudioFormat.CAMPAIGN -> {
+                    val angles = repository.generateCampaignVariations(
+                        topicOrProduct = effectiveTopic,
+                        targetAudience = _selectedAudience.value
+                    )
+                    _generatedCampaignAngles.value = angles
+                    _currentTab.value = WorkspaceTab.PLAN
+                    _planSubTab.value = PlanSubTab.CAMPAIGNS
+                }
+            }
 
-            _generatedSocialPost.value = result
             _isLoading.value = false
-            _statusMessage.value = "Generated successfully! (2 credits used)"
-
-            // Auto-save to database
-            repository.saveItem(
-                ContentItem(
-                    title = "$platform: ${effectiveTopic.take(35)}",
-                    type = "social_post",
-                    platform = platform.lowercase(),
-                    originalInput = effectiveTopic,
-                    targetAudience = _selectedAudience.value.name,
-                    tone = _selectedTone.value,
-                    content = result,
-                    hasImage = _selectedImageBitmap.value != null
-                )
-            )
         }
     }
 
-    fun generateVideoScript(durationSeconds: Int = 30) {
-        val input = _ideaInput.value.trim()
-        if (input.isBlank() && _selectedImageBitmap.value == null) {
-            _statusMessage.value = "Please enter an idea or add a product photo!"
-            return
-        }
-
-        if (!repository.hasEnoughCredits(4)) {
-            _showPaywallDialog.value = true
-            return
-        }
-
-        viewModelScope.launch {
-            _isLoading.value = true
-            _statusMessage.value = "Drafting ${durationSeconds}s viral video script..."
-            repository.deductCredits(4)
-
-            val effectiveTopic = if (input.isNotBlank()) input else "Product Feature"
-            val result = repository.generateVideoScript(
-                topicOrProduct = effectiveTopic,
-                targetAudience = _selectedAudience.value,
-                tone = _selectedTone.value,
-                durationSeconds = durationSeconds,
-                bitmap = _selectedImageBitmap.value
-            )
-
-            _generatedVideoScript.value = result
-            _isLoading.value = false
-            _statusMessage.value = "Video script forged! (4 credits used)"
-
-            repository.saveItem(
-                ContentItem(
-                    title = "Script (${durationSeconds}s): ${effectiveTopic.take(35)}",
-                    type = "video_script",
-                    platform = "shorts_reels",
-                    originalInput = effectiveTopic,
-                    targetAudience = _selectedAudience.value.name,
-                    tone = _selectedTone.value,
-                    content = result,
-                    hasImage = _selectedImageBitmap.value != null
-                )
-            )
-        }
-    }
-
-    fun generateCalendar() {
-        val input = _ideaInput.value.trim()
-        val effectiveTopic = if (input.isNotBlank()) input else "Weekly Brand Campaign"
-
-        if (!repository.hasEnoughCredits(6)) {
-            _showPaywallDialog.value = true
-            return
-        }
-
-        viewModelScope.launch {
-            _isLoading.value = true
-            _statusMessage.value = "Building 7-day content schedule..."
-            repository.deductCredits(6)
-
-            val calendar = repository.generateContentCalendar(
-                topicOrBusiness = effectiveTopic,
-                targetAudience = _selectedAudience.value,
-                tone = _selectedTone.value
-            )
-
-            _generatedCalendar.value = calendar
-            _isLoading.value = false
-            _statusMessage.value = "Content Calendar ready! (6 credits used)"
-            _currentTab.value = WorkspaceTab.CALENDAR
-        }
-    }
-
-    fun generateCampaignAngles() {
-        val input = _ideaInput.value.trim()
-        val effectiveTopic = if (input.isNotBlank()) input else "Core Product Offer"
-
-        if (!repository.hasEnoughCredits(3)) {
-            _showPaywallDialog.value = true
-            return
-        }
-
-        viewModelScope.launch {
-            _isLoading.value = true
-            _statusMessage.value = "Forging 4 A/B testing campaign variations..."
-            repository.deductCredits(3)
-
-            val angles = repository.generateCampaignVariations(
-                topicOrProduct = effectiveTopic,
-                targetAudience = _selectedAudience.value
-            )
-
-            _generatedCampaignAngles.value = angles
-            _isLoading.value = false
-            _statusMessage.value = "Campaign angles generated! (3 credits used)"
-            _currentTab.value = WorkspaceTab.CAMPAIGNS
-        }
-    }
-
-    // --- REPURPOSING FEATURE (MANDATORY REQUIREMENT) ---
-
+    // --- REPURPOSING ACTION ---
     fun executeRepurpose() {
         val raw = _repurposeRawContent.value.trim()
         if (raw.isBlank()) {
-            _statusMessage.value = "Please paste or enter some content to repurpose!"
+            _statusMessage.value = "Please paste text to repurpose"
             return
         }
 
@@ -300,7 +287,6 @@ class CreatorForgeViewModel(application: Application) : AndroidViewModel(applica
 
         viewModelScope.launch {
             _isLoading.value = true
-            _statusMessage.value = "Repurposing across ${_selectedChannels.value.size} channels..."
             repository.deductCredits(5)
 
             val bundle = repository.repurposeContent(
@@ -312,9 +298,7 @@ class CreatorForgeViewModel(application: Application) : AndroidViewModel(applica
 
             _repurposedBundle.value = bundle
             _isLoading.value = false
-            _statusMessage.value = "Repurposed successfully! (5 credits used)"
 
-            // Save bundle to library
             repository.saveItem(
                 ContentItem(
                     title = "Repurposed: ${raw.take(35)}...",
@@ -323,7 +307,7 @@ class CreatorForgeViewModel(application: Application) : AndroidViewModel(applica
                     originalInput = raw,
                     targetAudience = _selectedAudience.value.name,
                     tone = _repurposeTone.value,
-                    content = "LinkedIn:\n${bundle.linkedinPost}\n\nShort Script:\n${bundle.shortVideoScript}\n\nNewsletter:\n${bundle.newsletterDraft}"
+                    content = "LinkedIn:\n${bundle.linkedinPost}\n\nNewsletter:\n${bundle.newsletterDraft}"
                 )
             )
         }
@@ -334,11 +318,10 @@ class CreatorForgeViewModel(application: Application) : AndroidViewModel(applica
         val topic = if (input.isNotBlank()) input else "Content Creator Brand"
 
         viewModelScope.launch {
-            _statusMessage.value = "Analyzing top audience segments for '$topic'..."
             val suggested = repository.suggestAudienceAngles(topic)
             if (suggested.isNotEmpty()) {
                 _selectedAudience.value = suggested.first()
-                _statusMessage.value = "Switched to: ${suggested.first().name} (${suggested.first().keyTraits.take(30)}...)"
+                _statusMessage.value = "Calibrated for: ${suggested.first().name}"
             }
         }
     }
@@ -357,13 +340,13 @@ class CreatorForgeViewModel(application: Application) : AndroidViewModel(applica
 
     fun buyCredits(amount: Int) {
         repository.addCredits(amount)
-        _statusMessage.value = "Added $amount credits to your workspace!"
+        _statusMessage.value = "+$amount credits added"
         _showPaywallDialog.value = false
     }
 
     fun upgradeTier(tier: UserSubscriptionTier) {
         repository.upgradeTier(tier)
-        _statusMessage.value = "Upgraded to ${tier.displayName} tier!"
+        _statusMessage.value = "Upgraded to ${tier.displayName}"
         _showPaywallDialog.value = false
     }
 }

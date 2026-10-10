@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['userId', 'credits', 'tier']) &&
+             data.userId is string &&
+             data.credits is number &&
+             data.tier is string;
+    }
+
+    function isValidCreation(data, userId) {
+      return data.keys().hasAll(['userId', 'title', 'content', 'type']) &&
+             data.userId == userId &&
+             data.title is string &&
+             data.content is string &&
+             data.type is string;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+      allow delete: if isOwner(userId);
+
+      match /creations/{creationId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidCreation(request.resource.data, userId);
+        allow update: if isOwner(userId) && isValidCreation(request.resource.data, userId);
+        allow delete: if isOwner(userId);
+      }
+    }
+  }
+}
